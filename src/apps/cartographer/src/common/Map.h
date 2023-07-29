@@ -47,7 +47,7 @@ cv::Mat generateMaze(int rows, int cols, int pathSize) {
   return largeMaze;
 }
 
-cv::Mat cropArea(cv::Mat& maze, int x, int y, int width, int height) {
+cv::Mat cropArea(const cv::Mat& maze, int x, int y, int width, int height) {
   cv::Rect roi(x, y, width, height);
   return maze(roi);
 }
@@ -64,14 +64,19 @@ cv::Mat cropRandomArea(cv::Mat& maze, int width, int height) {
   return cropArea(maze, x, y, width, height);
 }
 
-cv::Point templateMatch(cv::Mat image, cv::Mat target) {
-  int result_cols = image.cols - target.cols + 1;
-  int result_rows = image.rows - target.rows + 1;
+cv::Point templateMatch(const cv::Mat& image, const cv::Mat& target) {
+  int overlap_x = std::min(image.cols, target.cols);
+  int overlap_y = std::min(image.rows, target.rows);
+
+  cv::Mat overlapTarget = target(cv::Rect(0, 0, overlap_x, overlap_y));
+
+  int result_cols = image.cols - overlapTarget.cols + 1;
+  int result_rows = image.rows - overlapTarget.rows + 1;
 
   cv::Mat result;
   result.create(result_rows, result_cols, CV_32FC1);
 
-  matchTemplate(image, target, result, cv::TM_CCOEFF_NORMED);
+  matchTemplate(image, overlapTarget, result, cv::TM_CCOEFF_NORMED);
   normalize(result, result, 0, 1, cv::NORM_MINMAX, -1, cv::Mat());
 
   double minVal;
@@ -84,24 +89,41 @@ cv::Point templateMatch(cv::Mat image, cv::Mat target) {
 
   matchLoc = maxLoc;
 
-  rectangle(
-      image,
-      matchLoc,
-      cv::Point(matchLoc.x + target.cols, matchLoc.y + target.rows),
-      cv::Scalar::all(0),
-      2,
-      8,
-      0
-  );
-  rectangle(
-      result,
-      matchLoc,
-      cv::Point(matchLoc.x + target.cols, matchLoc.y + target.rows),
-      cv::Scalar::all(0),
-      2,
-      8,
-      0
-  );
-
   return matchLoc;
+}
+
+// depends on MOVE_BY const
+int MOVE_BY_CROP = 20;
+
+struct StitchResult {
+  cv::Mat stitched;
+  cv::Point matchLoc;
+};
+
+StitchResult stitch(const cv::Mat& mapped, const cv::Mat& next) {
+  // template matching doesn't work well if the match is not fully inside
+  auto nextSmaller = cropArea(
+      next,
+      MOVE_BY_CROP,
+      MOVE_BY_CROP,
+      next.cols - MOVE_BY_CROP * 2,
+      next.rows - MOVE_BY_CROP * 2
+  );
+  cv::Point matchLoc = templateMatch(mapped, nextSmaller);
+
+  cv::Point normalizeMatchLoc = {
+      std::max(0, matchLoc.x - 20),
+      std::max(0, matchLoc.y - 20)};
+
+  int stitchedCols = std::max(mapped.cols, normalizeMatchLoc.x + next.cols);
+  int stitchedRows = std::max(mapped.rows, normalizeMatchLoc.y + next.rows);
+
+  cv::Mat stitched(stitchedRows, stitchedCols, CV_8UC1, cv::Scalar(255));
+
+  mapped.copyTo(stitched(cv::Rect(0, 0, mapped.cols, mapped.rows)));
+  next.copyTo(stitched(
+      cv::Rect(normalizeMatchLoc.x, normalizeMatchLoc.y, next.cols, next.rows)
+  ));
+
+  return {stitched, normalizeMatchLoc};
 }
