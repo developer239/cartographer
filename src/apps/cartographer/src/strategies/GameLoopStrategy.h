@@ -28,7 +28,7 @@ class GameLoopStrategy : public Core::IStrategy {
 
   void HandleEvent(SDL_Event& event) override {
     // moveBy random from 0 to 20
-    int MOVE_BY = rand() % 20;
+    int MOVE_BY = rand() % 25;
 
     if (event.type == SDL_KEYDOWN) {
       switch (event.key.keysym.sym) {

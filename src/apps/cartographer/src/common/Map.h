@@ -92,7 +92,8 @@ cv::Point templateMatch(const cv::Mat& image, const cv::Mat& target) {
   return matchLoc;
 }
 
-// depends on MOVE_BY const
+// must be less or equal to MOVE_BY and can't be too high (otherwise the result
+// is gonna be finding itself over and over again)
 int MOVE_BY_CROP = 20;
 
 struct StitchResult {
